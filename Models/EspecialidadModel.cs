@@ -2,8 +2,8 @@
 {
     public class EspecialidadModel
     {
-        public Int64 IdEspecialidad { get; set; } // Correspondiente a id_especialidad
+        public int IdEspecialidad { get; set; } // Correspondiente a id_especialidad
         public string Nombre { get; set; }        // Correspondiente a nombre
-        public string Descripcion { get; set; }   // Correspondiente a descripcion
+        //public string Descripcion { get; set; }   // Correspondiente a descripcion
     }
 }

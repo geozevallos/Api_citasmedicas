@@ -1,4 +1,5 @@
-﻿using Api_citasmedicas.Models;
+﻿using System.Data;
+using Api_citasmedicas.Models;
 using MySqlConnector;
 
 namespace Api_citasmedicas.Repository
@@ -11,40 +12,31 @@ namespace Api_citasmedicas.Repository
         {
             _conectionString = configuration.GetConnectionString("MySqlConnection");
         }
+
         public async Task<List<EspecialidadModel>> ListarAsync()
         {
-            try
+            var lista = new List<EspecialidadModel>();
+
+            using var connection = new MySqlConnection(_conectionString);
+            await connection.OpenAsync();
+
+            using var command = new MySqlCommand("sp_listar_especialidades", connection)
             {
-                List<EspecialidadModel> especialidades = new List<EspecialidadModel>();
+                CommandType = CommandType.StoredProcedure
+            };
 
-                using var connection = new MySqlConnection(_conectionString);
-                await connection.OpenAsync();
+            using var reader = await command.ExecuteReaderAsync();
 
-                var command = new MySqlCommand("sp_especialidad_listar", connection)
-                {
-                    CommandType = System.Data.CommandType.StoredProcedure
-                };
-
-                using var reader = await command.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    var especialidad = new EspecialidadModel
-                    {
-                        IdEspecialidad = reader.GetInt64(0), // Asegúrate de que el índice sea correcto
-                        Nombre = reader.GetString(1),
-                        Descripcion = reader.GetString(2)
-                    };
-
-                    especialidades.Add(especialidad);
-                }
-
-                return especialidades;
-            }
-            catch (Exception ex)
+            while (await reader.ReadAsync())
             {
-                // Log obligatorio (archivo, consola, Serilog, etc.)
-                throw new Exception("Error en la base de datos => " + ex.Message, ex);
+                lista.Add(new EspecialidadModel
+                {
+                    IdEspecialidad = reader.GetInt32("id_especialidad"),
+                    Nombre = reader.GetString("nombre")
+                });
             }
+
+            return lista;
         }
     }
 }

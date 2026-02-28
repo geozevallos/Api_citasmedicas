@@ -33,5 +33,43 @@ namespace Api_citasmedicas.Controllers
                 });
             }
         }
+
+        [HttpGet("especialidad/{idEspecialidad}")]
+        public async Task<IActionResult> ListarPorEspecialidad(int idEspecialidad)
+        {
+            try
+            {
+                var lista = await _medicosRepository.ListarPorEspecialidadAsync(idEspecialidad);
+                return Ok(lista);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al listar médicos");
+                return StatusCode(500, new
+                {
+                    mensaje = "Error interno del servidor"
+                });
+            }
+        }
+
+        [HttpGet("horario")]
+        public async Task<IActionResult> Listar(
+        [FromQuery] int medico,
+        [FromQuery] DateTime fecha)
+        {
+            try
+            {
+                var lista = await _medicosRepository.ListarHorarioAsync(medico, fecha);
+                return Ok(lista);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al listar horarios");
+                return StatusCode(500, new
+                {
+                    mensaje = "Error interno del servidor"
+                });
+            }
+        }
     }
 }

@@ -18,26 +18,22 @@ namespace Api_citasmedicas.Controllers
         }
 
 
-        // =========================
-        // REGISTRAR CITA
-        // =========================
-        [HttpPost]
-        public async Task<IActionResult> ReservarCita([FromBody] ReservarCitaModel citamodel)
+        [HttpPost("reservar")]
+        public async Task<IActionResult> Reservar([FromBody] ReservarCitaModel request)
         {
-            if (citamodel == null)
-            {
-                return BadRequest("Los datos de la cita son requeridos.");
-            }
-
             try
             {
-                var resultado = await _reservarCitaRepository.ReservarCitaAsync(citamodel);
-                return CreatedAtAction(nameof(ReservarCita), new { id = resultado }, citamodel);
+                await _reservarCitaRepository.ReservarCitaAsync(request);
+                return Ok(new { mensaje = "Cita reservada correctamente" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al reservar la cita.");
-                return StatusCode(500, "Error interno del servidor.");  
+                _logger.LogError(ex, "Error al reservar cita");
+                return StatusCode(500, new { mensaje = "Error interno del servidor" });
             }
         }
     }

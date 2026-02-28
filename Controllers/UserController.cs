@@ -59,19 +59,60 @@ namespace Api_citasmedicas.Controllers
         // 1. Login SERVICIOS
         // =========================
         [HttpGet("Login")]
-        public async Task<IActionResult> LoginAsync([FromQuery]string usuario, [FromQuery] string password)
+        public async Task<IActionResult> LoginAsync([FromQuery] string usuario, [FromQuery] string password)
         {
             try
             {
-                var users = await _userRepository.LoginAsync(usuario,password);
-                return Ok(users);
+                var user = await _userRepository.LoginAsync(usuario, password);
+
+                if (user == null)
+                {
+                    return Unauthorized(new
+                    {
+                        mensaje = "Usuario o contraseña incorrectos"
+                    });
+                }
+
+                return Ok(new
+                {
+                    mensaje = "Login correcto",
+                    usuario = user
+                });
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error al listar usuarios", ex);
+                _logger.LogError(ex, "Error en login");
                 return StatusCode(500, new
                 {
-                    mensaje = "Error al listar las especialidades => " + ex.Message
+                    mensaje = "Error interno del servidor"
+                });
+            }
+        }
+
+
+        [HttpGet("paciente/{idUsuario}")]
+        public async Task<IActionResult> ObtenerPorUsuario(int idUsuario)
+        {
+            try
+            {
+                var paciente = await _userRepository.ObtenerPorUsuarioAsync(idUsuario);
+
+                if (paciente == null)
+                {
+                    return NotFound(new
+                    {
+                        mensaje = "El usuario no tiene paciente registrado"
+                    });
+                }
+
+                return Ok(paciente);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener paciente");
+                return StatusCode(500, new
+                {
+                    mensaje = "Error interno del servidor"
                 });
             }
         }

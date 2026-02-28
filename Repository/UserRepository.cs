@@ -1,4 +1,5 @@
-﻿using Api_citasmedicas.Models;
+﻿using System.Data;
+using Api_citasmedicas.Models;
 using MySqlConnector;
 
 namespace Api_citasmedicas.Repository
@@ -36,44 +37,69 @@ namespace Api_citasmedicas.Repository
             }
         }
 
-        public async Task<List<UserModel>> LoginAsync(string usuario, string password)
+        public async Task<LoginResponseModel?> LoginAsync(string usuario, string password)
         {
-            try
+            using var connection = new MySqlConnection(_conectionString);
+            await connection.OpenAsync();
+
+            using var command = new MySqlCommand("sp_login_usuario", connection)
             {
-                List<UserModel> users = new List<UserModel>();
+                CommandType = CommandType.StoredProcedure
+            };
 
-                using var connection = new MySqlConnection(_conectionString);
-                await connection.OpenAsync();
+            command.Parameters.Add("p_username", MySqlDbType.VarChar).Value = usuario;
+            command.Parameters.Add("p_password", MySqlDbType.VarChar).Value = password;
 
-                var command = new MySqlCommand("sp_login_usuario", connection)
+            using var reader = await command.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                return new LoginResponseModel
                 {
-                    CommandType = System.Data.CommandType.StoredProcedure
+                    IdUsuario = reader.GetInt32("id_usuario"),
+                    Username = reader.GetString("username"),
+                    IdRol = reader.GetInt32("id_rol"),
+                    RolNombre = reader.GetString("rol_nombre"),
+                    Activo = reader.GetBoolean("activo")
                 };
-
-                command.Parameters.AddWithValue("p_username", usuario);
-                command.Parameters.AddWithValue("p_password", password);
-
-                using var reader = await command.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    var user = new UserModel
-                    {
-                        IdUsuario = reader.GetInt64(0),
-                        IdPersona = reader.GetInt64(1),
-                        RolNombre = reader.GetString(2),
-                        Activo = reader.GetInt16(3)
-                    };
-
-                    users.Add(user);
-                }
-
-                return users;
             }
-            catch (Exception ex)
+
+            return null;
+        }
+
+
+        public async Task<PacienteResponseModel?> ObtenerPorUsuarioAsync(int idUsuario)
+        {
+            using var connection = new MySqlConnection(_conectionString);
+            await connection.OpenAsync();
+
+            using var command = new MySqlCommand("sp_obtener_paciente_por_usuario", connection)
             {
-                // Log obligatorio (archivo, consola, Serilog, etc.)
-                throw new Exception("Error en la base de datos => " + ex.Message, ex);
+                CommandType = CommandType.StoredProcedure
+            };
+
+            command.Parameters.Add("p_id_usuario", MySqlDbType.Int32)
+                   .Value = idUsuario;
+
+            using var reader = await command.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                return new PacienteResponseModel
+                {
+                    IdPaciente = reader.GetInt32("id_paciente"),
+                    IdUsuario = reader.GetInt32("id_usuario"),
+                    Nombres = reader.GetString("nombres"),
+                    Apellidos = reader.GetString("apellidos"),
+                    Documento = reader["documento"]?.ToString(),
+                    FechaNacimiento = reader["fecha_nacimiento"] as DateTime?,
+                    Sexo = reader["sexo"]?.ToString(),
+                    Celular = reader["celular"]?.ToString(),
+                    Email = reader["email"]?.ToString()
+                };
             }
+
+            return null;
         }
 
     }

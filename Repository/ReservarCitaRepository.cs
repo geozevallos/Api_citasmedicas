@@ -12,31 +12,30 @@ namespace Api_citasmedicas.Repository
         {
             _conectionString = configuration.GetConnectionString("MySqlConnection");
         }
-        public async Task<int> ReservarCitaAsync(ReservarCitaModel citamodel)
+
+        public async Task ReservarCitaAsync(ReservarCitaModel request)
         {
+            using var connection = new MySqlConnection(_conectionString);
+            await connection.OpenAsync();
+
+            using var command = new MySqlCommand("sp_reservar_cita", connection);
+            command.CommandType = System.Data.CommandType.StoredProcedure;
+
+            command.Parameters.AddWithValue("p_id_paciente", request.IdPaciente);
+            command.Parameters.AddWithValue("p_id_horario", request.IdHorario);
+            command.Parameters.AddWithValue("p_observacion", request.Observacion);
+
             try
             {
-                using var connection = new MySqlConnection(_conectionString);
-                await connection.OpenAsync();
-
-                var command = new MySqlCommand("sp_cita_reserva", connection)
-                {
-                    CommandType = System.Data.CommandType.StoredProcedure
-                };
-
-                command.Parameters.AddWithValue("p_id_paciente", citamodel.IdPaciente);
-                command.Parameters.AddWithValue("p_id_horario", citamodel.IdHorario);
-                command.Parameters.AddWithValue("p_fecha_reserva", citamodel.FechaReserva);
-                command.Parameters.AddWithValue("p_id_estado", citamodel.IdEstado);
-                command.Parameters.AddWithValue("p_observacion", citamodel.Observacion);
-
-                return Convert.ToInt32(await command.ExecuteScalarAsync());
-
+                await command.ExecuteNonQueryAsync();
             }
-            catch (Exception ex)
+            catch (MySqlException ex)
             {
-                // Aquí puedes manejar el error, como registrar en un log
-                throw new Exception("Error al reservar la cita => " + ex.Message, ex);
+                if (ex.Number == 1644)
+                {
+                    throw new InvalidOperationException("No hay cupos disponibles");
+                }
+                throw;
             }
         }
     }
