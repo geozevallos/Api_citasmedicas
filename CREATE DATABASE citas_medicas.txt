@@ -1,0 +1,519 @@
+CREATE DATABASE citas_medicas;
+USE citas_medicas;
+
+CREATE TABLE app_rol (
+    id_rol INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    activo TINYINT(1) DEFAULT 1
+);
+
+INSERT INTO app_rol (nombre) VALUES 
+('ADMIN'),
+('MEDICO'),
+('PACIENTE');
+
+
+CREATE TABLE app_usuario (
+    id_usuario INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    id_rol INT NOT NULL,
+    activo TINYINT(1) DEFAULT 1,
+    FOREIGN KEY (id_rol) REFERENCES app_rol(id_rol)
+);
+
+CREATE TABLE app_paciente (
+    id_paciente INT AUTO_INCREMENT PRIMARY KEY,
+    id_usuario INT NOT NULL UNIQUE,
+    nombres VARCHAR(100) NOT NULL,
+    apellidos VARCHAR(100) NOT NULL,
+    documento VARCHAR(20),
+    fecha_nacimiento DATE,
+    sexo VARCHAR(10),
+    celular VARCHAR(20),
+    email VARCHAR(100),
+    activo TINYINT(1) DEFAULT 1,
+    FOREIGN KEY (id_usuario) REFERENCES app_usuario(id_usuario)
+);
+
+CREATE TABLE app_especialidad (
+    id_especialidad INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    activo TINYINT(1) DEFAULT 1
+);
+
+INSERT INTO app_especialidad (nombre) VALUES
+('Cardiología'),
+('Pediatría'),
+('Dermatología'),
+('Medicina General');
+
+CREATE TABLE servicios_medicos (
+    id_servicio INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    descripcion VARCHAR(255),
+    activo TINYINT(1) DEFAULT 1
+);
+
+	
+
+INSERT INTO servicios_medicos (nombre, descripcion) VALUES
+('Consulta General', 'Atención médica general'),
+('Control', 'Seguimiento de tratamiento'),
+('Emergencia', 'Atención prioritaria');
+
+
+
+CREATE TABLE app_medico (
+    id_medico INT AUTO_INCREMENT PRIMARY KEY,
+    id_usuario INT UNIQUE,
+    nombres VARCHAR(100) NOT NULL,
+    apellidos VARCHAR(100) NOT NULL,
+    cmp VARCHAR(20),
+    id_especialidad INT NOT NULL,
+    activo TINYINT(1) DEFAULT 1,
+    FOREIGN KEY (id_usuario) REFERENCES app_usuario(id_usuario),
+    FOREIGN KEY (id_especialidad) REFERENCES app_especialidad(id_especialidad)
+);
+
+
+CREATE TABLE cita_horario (
+    id_horario INT AUTO_INCREMENT PRIMARY KEY,
+    id_medico INT NOT NULL,
+    id_servicio INT NOT NULL,
+    fecha DATE NOT NULL,
+    hora_inicio TIME NOT NULL,
+    hora_fin TIME NOT NULL,
+    cupos_disponibles INT NOT NULL,
+    activo TINYINT(1) DEFAULT 1,
+    FOREIGN KEY (id_medico) REFERENCES app_medico(id_medico),
+    FOREIGN KEY (id_servicio) REFERENCES servicios_medicos(id_servicio)
+);
+
+CREATE TABLE cita_reserva (
+    id_reserva INT AUTO_INCREMENT PRIMARY KEY,
+    id_paciente INT NOT NULL,
+    id_horario INT NOT NULL,
+    fecha_reserva DATETIME DEFAULT CURRENT_TIMESTAMP,
+    estado VARCHAR(30) DEFAULT 'PENDIENTE',
+    observacion VARCHAR(255),
+    FOREIGN KEY (id_paciente) REFERENCES app_paciente(id_paciente),
+    FOREIGN KEY (id_horario) REFERENCES cita_horario(id_horario)
+);
+
+
+
+
+
+
+----------------
+
+
+CREATE PROCEDURE sp_obtener_paciente(
+    IN p_id_paciente BIGINT
+)
+BEGIN
+    SELECT 
+        p.id_paciente,
+        p.nombres,
+        p.apellidos,
+        p.documento,
+        p.fecha_nacimiento,
+        p.sexo,
+        p.celular,
+        p.email,
+        u.username
+    FROM app_paciente p
+    INNER JOIN app_usuario u ON u.id_usuario = p.id_usuario
+    WHERE p.id_paciente = p_id_paciente
+      AND p.activo = 1;
+END;
+
+--------- Especialidades
+
+CREATE PROCEDURE sp_listar_especialidades()
+BEGIN
+    SELECT 
+        id_especialidad,
+        nombre
+    FROM app_especialidad
+    WHERE activo = 1
+    ORDER BY nombre;
+END;
+
+
+
+--------------------------
+---- Listas médicos
+-----
+
+CREATE PROCEDURE sp_listar_medicos()
+BEGIN
+    SELECT 
+        m.id_medico,
+        m.nombres,
+        m.apellidos,
+        m.cmp,
+        e.nombre AS especialidad
+    FROM app_medico m
+    INNER JOIN app_especialidad e 
+        ON e.id_especialidad = m.id_especialidad
+    WHERE m.activo = 1;
+END;
+
+-- Medico por especialidad:
+
+CREATE PROCEDURE sp_listar_medicos_por_especialidad(
+    IN p_id_especialidad INT
+)
+BEGIN
+    SELECT 
+        m.id_medico,
+        m.nombres,
+        m.apellidos,
+        m.cmp
+    FROM app_medico m
+    WHERE m.id_especialidad = p_id_especialidad
+      AND m.activo = 1;
+END;
+
+
+-- Servicios
+CREATE PROCEDURE sp_listar_servicios()
+BEGIN
+    SELECT 
+        id_servicio,
+        nombre,
+        descripcion
+    FROM servicios_medicos
+    WHERE activo = 1;
+END;
+
+-- Horarios por médico
+CREATE PROCEDURE sp_listar_horarios_medico(
+    IN p_id_medico INT,
+    IN p_fecha DATE
+)
+BEGIN
+    SELECT 
+        h.id_horario,
+        h.fecha,
+        h.hora_inicio,
+        h.hora_fin,
+        h.cupos_disponibles,
+        s.nombre AS servicio
+    FROM cita_horario h
+    INNER JOIN servicios_medicos s 
+        ON s.id_servicio = h.id_servicio
+    WHERE h.id_medico = p_id_medico
+      AND h.fecha = p_fecha
+      AND h.cupos_disponibles > 0
+      AND h.activo = 1;
+END;
+
+select * from cita_horario;
+
+------ RESERVAS
+
+CREATE PROCEDURE sp_reservar_cita(
+    IN p_id_paciente BIGINT,
+    IN p_id_horario INT,
+    IN p_observacion VARCHAR(255)
+)
+BEGIN
+    DECLARE v_cupos INT;
+
+    START TRANSACTION;
+
+    SELECT cupos_disponibles 
+    INTO v_cupos
+    FROM cita_horario
+    WHERE id_horario = p_id_horario
+    FOR UPDATE;
+
+    IF v_cupos > 0 THEN
+
+        INSERT INTO cita_reserva (
+            id_paciente,
+            id_horario,
+            estado,
+            observacion
+        )
+        VALUES (
+            p_id_paciente,
+            p_id_horario,
+            'PENDIENTE',
+            p_observacion
+        );
+
+        UPDATE cita_horario
+        SET cupos_disponibles = cupos_disponibles - 1
+        WHERE id_horario = p_id_horario;
+
+        COMMIT;
+
+    ELSE
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'No hay cupos disponibles';
+    END IF;
+
+END ;
+
+-- Reservas por paciente
+CREATE PROCEDURE sp_listar_reservas_paciente(
+    IN p_id_paciente BIGINT
+)
+BEGIN
+    SELECT 
+        r.id_reserva,
+        r.fecha_reserva,
+        r.estado,
+        r.observacion,
+        h.fecha,
+        h.hora_inicio,
+        h.hora_fin,
+        m.nombres AS medico,
+        e.nombre AS especialidad
+    FROM cita_reserva r
+    INNER JOIN cita_horario h 
+        ON h.id_horario = r.id_horario
+    INNER JOIN app_medico m 
+        ON m.id_medico = h.id_medico
+    INNER JOIN app_especialidad e
+        ON e.id_especialidad = m.id_especialidad
+    WHERE r.id_paciente = p_id_paciente
+    ORDER BY h.fecha DESC;
+end;
+
+-- cancelar reserva
+CREATE PROCEDURE sp_cancelar_reserva(
+    IN p_id_reserva INT
+)
+BEGIN
+    DECLARE v_id_horario INT;
+
+    START TRANSACTION;
+
+    SELECT id_horario
+    INTO v_id_horario
+    FROM cita_reserva
+    WHERE id_reserva = p_id_reserva
+    FOR UPDATE;
+
+    UPDATE cita_reserva
+    SET estado = 'CANCELADA'
+    WHERE id_reserva = p_id_reserva;
+
+    UPDATE cita_horario
+    SET cupos_disponibles = cupos_disponibles + 1
+    WHERE id_horario = v_id_horario;
+
+    COMMIT;
+END;
+
+
+--- Insertando datos
+INSERT INTO app_usuario (username, password, id_rol, activo) VALUES
+('admin1', '123456', 1, 1),
+('medico1', '123456', 2, 1),
+('medico2', '123456', 2, 1),
+('paciente1', '123456', 3, 1),
+('paciente2', '123456', 3, 1),
+('paciente3', '123456', 3, 1),
+('paciente4', '123456', 3, 1),
+('paciente5', '123456', 3, 1);
+
+-- Especialdad
+INSERT INTO app_especialidad (nombre, activo) VALUES
+('Gastroenterología', 1),
+('Pediatria', 1),
+('Traumatología', 1);
+
+
+INSERT INTO servicios_medicos (nombre, descripcion, activo) VALUES
+('Examen Médico', 'Evaluación clínica', 1),
+('Chequeo Preventivo', 'Control anual preventivo', 1);
+
+
+
+-- paciente
+INSERT INTO app_paciente 
+(id_usuario, documento, nombres, apellidos, fecha_nacimiento, sexo, celular, email, activo)
+VALUES
+(4, '70000001', 'Luis', 'Gomez Perez', '1995-05-10', 'M', '999111111', 'luis@mail.com', 1),
+(5, '70000002', 'Maria', 'Lopez Diaz', '1992-08-21', 'F', '999222222', 'maria@mail.com', 1),
+(6, '70000003', 'Carlos', 'Torres Ramos', '1988-03-15', 'M', '999333333', 'carlos@mail.com', 1),
+(7, '70000004', 'Ana', 'Martinez Vega', '2000-11-01', 'F', '999444444', 'ana@mail.com', 1),
+(8, '70000005', 'Sofia', 'Castro Mendoza', '1997-07-30', 'F', '999555555', 'sofia@mail.com', 1);
+
+
+
+INSERT INTO app_medico 
+(id_usuario, nombres, apellidos, cmp, id_especialidad, activo)
+VALUES
+(2, 'Juan', 'Perez Soto', 'CMP001', 1, 1),
+(3, 'Ricardo', 'Salas Diaz', 'CMP002', 2, 1),
+(NULL, 'Miguel', 'Rojas Luna', 'CMP003', 3, 1),
+(NULL, 'Patricia', 'Navarro Cruz', 'CMP004', 4, 1),
+(NULL, 'Alberto', 'Mejia Torres', 'CMP005', 5, 1);
+
+
+INSERT INTO cita_horario
+(id_medico, id_servicio, fecha, hora_inicio, hora_fin, cupos_disponibles, activo)
+VALUES
+(1, 1, '2026-03-01', '08:00:00', '09:00:00', 5, 1),
+(1, 2, '2026-03-01', '09:00:00', '10:00:00', 5, 1),
+(2, 1, '2026-03-01', '10:00:00', '11:00:00', 5, 1),
+(3, 3, '2026-03-02', '08:00:00', '09:00:00', 5, 1),
+(4, 4, '2026-03-02', '09:00:00', '10:00:00', 5, 1);
+
+
+INSERT INTO cita_reserva
+(id_paciente, id_horario, estado, observacion)
+VALUES
+(1, 1, 'PENDIENTE', 'Dolor de cabeza'),
+(2, 2, 'CONFIRMADA', 'Control mensual'),
+(3, 3, 'PENDIENTE', 'Chequeo general'),
+(4, 4, 'ATENDIDA', 'Emergencia leve'),
+(5, 5, 'CANCELADA', 'No pudo asistir');
+
+
+SHOW PROCEDURE STATUS WHERE Db = 'citas_medicas';
+
+-- =========================================
+-- 1️⃣ LISTAR ESPECIALIDADES
+-- =========================================
+CALL sp_listar_especialidades();
+
+
+-- =========================================
+-- 2️⃣ LISTAR SERVICIOS
+-- =========================================
+CALL sp_listar_servicios();
+
+
+-- =========================================
+-- 3️⃣ LISTAR MÉDICOS
+-- =========================================
+CALL sp_listar_medicos();
+
+
+-- =========================================
+-- 4️⃣ MÉDICOS POR ESPECIALIDAD (ID = 1)
+-- =========================================
+CALL sp_listar_medicos_por_especialidad(1);
+
+
+-- =========================================
+-- 5️⃣ OBTENER PACIENTE (ID = 1)
+-- =========================================
+CALL sp_obtener_paciente(1);
+
+
+-- =========================================
+-- 6️⃣ LISTAR HORARIOS DE MÉDICO 1
+-- FECHA: 2026-03-01
+-- =========================================
+CALL sp_listar_horarios_medico(1, '2026-03-01');
+
+
+-- =========================================
+-- 7️⃣ RESERVAR CITA
+-- PACIENTE 1
+-- HORARIO 1
+-- =========================================
+CALL sp_reservar_cita(1, 1, 'Prueba desde script completo');
+
+
+-- =========================================
+-- 8️⃣ VERIFICAR CUPOS RESTANTES
+-- =========================================
+SELECT id_horario, cupos_disponibles
+FROM cita_horario
+WHERE id_horario = 1;
+
+
+-- =========================================
+-- 9️⃣ VER RESERVAS DEL PACIENTE 1
+-- =========================================
+CALL sp_listar_reservas_paciente(1);
+
+
+-- =========================================
+-- 🔟 CANCELAR RESERVA (ID = 1)
+-- =========================================
+CALL sp_cancelar_reserva(1);
+
+
+-- =========================================
+-- 1️⃣1️⃣ VERIFICAR ESTADO DESPUÉS DE CANCELAR
+-- =========================================
+SELECT *
+FROM cita_reserva
+WHERE id_reserva = 1;
+
+
+-- =========================================
+-- 1️⃣2️⃣ VERIFICAR QUE EL CUPO REGRESÓ
+-- =========================================
+SELECT id_horario, cupos_disponibles
+FROM cita_horario
+WHERE id_horario = 1;
+
+
+
+-- Procedimiento
+CREATE PROCEDURE sp_login_usuario(
+    IN p_username VARCHAR(50),
+    IN p_password VARCHAR(255)
+)
+BEGIN
+
+    SELECT 
+        u.id_usuario,
+        u.username,
+        u.id_rol,
+        r.nombre AS rol_nombre,
+        u.activo
+    FROM app_usuario u
+    INNER JOIN app_rol r ON r.id_rol = u.id_rol
+    WHERE u.username = p_username
+      AND u.password = p_password
+      AND u.activo = 1
+    LIMIT 1;
+END;
+
+
+drop procedure sp_obtener_paciente_por_usuario;
+CREATE PROCEDURE sp_obtener_paciente_por_usuario(
+    IN p_id_usuario INT
+)
+BEGIN
+    SELECT 
+        p.id_paciente,
+        p.id_usuario, 
+        p.nombres,
+        p.apellidos,
+        p.documento,
+        p.fecha_nacimiento,
+        p.sexo,
+        p.celular,
+        p.email,
+        u.username
+    FROM app_paciente p
+    INNER JOIN app_usuario u ON u.id_usuario = p.id_usuario
+    WHERE p.id_usuario = p_id_usuario
+      AND p.activo = 1
+    LIMIT 1;
+end;
+
+select * from app_medico am 
+join app_especialidad ae 
+on am.id_especialidad = ae.id_especialidad;
+
+select * from cita_horario ch;
+select * from app_especialidad ae;
+select * from app_usuario au;
+
+select * from cita_reserva;
